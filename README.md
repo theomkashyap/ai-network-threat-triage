@@ -1,4 +1,4 @@
-# AI-Network-Threat-Triage
+# AI Network Threat Triage — Real-Time Detection & AI-Powered SOC Triage
 
 ![Platform](https://img.shields.io/badge/Platform-VirtualBox-blue?style=flat-square)
 ![Language](https://img.shields.io/badge/Language-Python-yellow?style=flat-square)
