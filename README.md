@@ -303,7 +303,7 @@ cd ai-network-threat-triage
 
 **2. Install dependencies**
 ```bash
-pip install flask requests --break-system-packages
+pip install -r requirements.txt
 sudo apt install tshark -y
 ```
 
