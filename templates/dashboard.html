@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Network Threat Triage</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --ink:#0f172a;--ink2:#334155;--ink3:#64748b;--ink4:#94a3b8;
+  --paper:#f1f5f9;--surface:#fff;--raised:#f8fafc;
+  --line:rgba(0,0,0,0.07);--line2:rgba(0,0,0,0.11);
+  --cyan:#0369a1;--cyan-dim:rgba(3,105,161,0.08);
+  --red:#dc2626;--red-dim:rgba(220,38,38,0.08);
+  --orange:#ea580c;--orange-dim:rgba(234,88,12,0.08);
+  --yellow:#b45309;--yellow-dim:rgba(180,83,9,0.08);
+  --green:#15803d;--green-dim:rgba(21,128,61,0.08);
+  --purple:#7c3aed;--purple-dim:rgba(124,58,237,0.08);
+  --blue-dim:rgba(37,99,235,0.08);--slate:#64748b;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  --r:4px;--r2:6px;
+}
+html{font-size:13px;}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
+
+/* TOPBAR */
+#topbar{height:44px;background:var(--surface);border-bottom:1px solid var(--line2);display:flex;align-items:center;padding:0 20px;gap:0;flex-shrink:0;position:sticky;top:0;z-index:200;}
+.tb-brand{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.12em;color:var(--cyan);padding-right:20px;border-right:1px solid var(--line2);display:flex;align-items:center;gap:8px;text-transform:uppercase;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#16a34a;flex-shrink:0;}
+.live-dot.blink{animation:blink 1.2s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(22,163,74,.4);}50%{opacity:.5;box-shadow:0 0 0 4px rgba(22,163,74,0);}}
+.tb-nav{display:flex;align-items:stretch;height:100%;padding-left:4px;}
+.tb-nav a{display:flex;align-items:center;padding:0 16px;font-size:11.5px;color:var(--ink3);text-decoration:none;letter-spacing:.04em;border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;}
+.tb-nav a:hover{color:var(--ink2);}
+.tb-nav a.active{color:var(--ink);border-bottom-color:var(--cyan);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+#clock{font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.06em;}
+.pill-btn{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;padding:5px 14px;border-radius:var(--r);border:1px solid;cursor:pointer;transition:all .12s;text-transform:uppercase;background:transparent;}
+.pill-btn.primary{border-color:var(--cyan);color:var(--cyan);}
+.pill-btn.primary:hover:not(:disabled){background:var(--cyan);color:#fff;}
+.pill-btn.primary:disabled{opacity:.35;cursor:default;}
+.pill-btn.ghost{border-color:var(--line2);color:var(--ink3);}
+.pill-btn.ghost:hover{border-color:var(--red);color:var(--red);}
+.pill-btn.success{border-color:#15803d;color:#15803d;}
+.pill-btn.success:hover{background:#15803d;color:#fff;}
+
+/* LAYOUT */
+#shell{display:flex;flex:1;overflow:hidden;}
+
+/* SIDEBAR */
+#sidebar{width:210px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto;padding:16px 0;}
+.sb-section{padding:0 14px;margin-bottom:20px;}
+.sb-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;color:var(--ink4);text-transform:uppercase;margin-bottom:10px;padding:0 2px;}
+.kv-row{display:flex;justify-content:space-between;align-items:center;padding:5px 2px;border-bottom:1px solid var(--line);}
+.kv-row:last-child{border-bottom:none;}
+.kv-key{font-size:11px;color:var(--ink3);}
+.kv-val{font-family:var(--mono);font-size:11px;color:var(--ink);}
+.kv-val.c{color:var(--red);}.kv-val.h{color:var(--orange);}.kv-val.m{color:var(--yellow);}.kv-val.l{color:var(--green);}.kv-val.t{color:var(--cyan);}
+
+/* CAPTURE BLOCK */
+.capture-block{margin:0 14px 20px;background:var(--raised);border:1px solid var(--line2);border-radius:var(--r2);padding:14px;}
+.sb-status-label{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--ink4);text-transform:uppercase;margin-bottom:8px;}
+.run-btn-big{width:100%;font-family:var(--mono);font-size:11px;letter-spacing:.1em;padding:9px;border-radius:var(--r);border:1px solid var(--cyan);background:transparent;color:var(--cyan);cursor:pointer;transition:all .12s;text-transform:uppercase;margin-bottom:10px;}
+.run-btn-big:hover:not(:disabled){background:var(--cyan);color:#fff;}
+.run-btn-big:disabled{opacity:.35;cursor:default;}
+.status-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:8px;}
+#sb-status-dot{width:6px;height:6px;border-radius:50%;background:var(--ink4);display:inline-block;flex-shrink:0;margin-top:3px;}
+#sb-status-dot.running{background:var(--yellow);animation:blink 1s ease-in-out infinite;}
+#sb-status-text{font-size:11px;color:var(--ink2);line-height:1.5;}
+
+/* LIVE COUNTER */
+.live-counter{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;display:none;}
+.live-counter.active{display:block;}
+.lc-label{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--ink4);text-transform:uppercase;margin-bottom:4px;}
+.lc-num{font-family:var(--mono);font-size:22px;color:var(--cyan);line-height:1;}
+.lc-unit{font-size:10px;color:var(--ink3);margin-left:3px;}
+.lc-breakdown{margin-top:8px;display:flex;flex-direction:column;gap:4px;}
+.lc-row{display:flex;justify-content:space-between;font-size:10.5px;}
+.lc-ip{font-family:var(--mono);color:var(--ink2);}
+.lc-cnt{font-family:var(--mono);color:var(--cyan);}
+
+/* DETECTED BADGE */
+.detected-badge{margin-top:8px;padding:6px 8px;border-radius:var(--r);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;text-align:center;display:none;}
+.detected-badge.show{display:block;}
+.detected-badge.icmp{background:var(--cyan-dim);color:var(--cyan);border:1px solid rgba(3,105,161,.25);}
+.detected-badge.portscan{background:var(--purple-dim);color:var(--purple);border:1px solid rgba(124,58,237,.25);}
+.detected-badge.ssh{background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(180,83,9,.25);}
+
+/* CONTENT */
+#content{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.tab-pane{display:none;padding:20px 24px;flex-direction:column;gap:16px;flex:1;}
+.tab-pane.active{display:flex;}
+
+/* METRICS */
+.metric-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+.metric{background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);padding:14px 16px;display:flex;flex-direction:column;gap:4px;position:relative;overflow:hidden;}
+.metric::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;}
+.metric.all::after{background:var(--cyan);}.metric.crit::after{background:var(--red);}
+.metric.high::after{background:var(--orange);}.metric.med::after{background:var(--yellow);}.metric.low::after{background:var(--green);}
+.metric-label{font-size:10.5px;color:var(--ink3);letter-spacing:.04em;}
+.metric-value{font-family:var(--mono);font-size:26px;font-weight:300;line-height:1;}
+.metric.all .metric-value{color:var(--cyan);}.metric.crit .metric-value{color:var(--red);}
+.metric.high .metric-value{color:var(--orange);}.metric.med .metric-value{color:var(--yellow);}.metric.low .metric-value{color:var(--green);}
+
+/* FEED TABLE */
+.feed-header{display:flex;align-items:center;justify-content:space-between;}
+.feed-title{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink3);text-transform:uppercase;}
+.feed-meta{font-size:11px;color:var(--ink3);}
+#alert-table{background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden;}
+.tbl-head{display:grid;grid-template-columns:90px 110px 120px 1fr 70px 80px 28px;padding:0 16px;height:32px;align-items:center;background:var(--raised);border-bottom:1px solid var(--line2);}
+.tbl-head span{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:var(--ink4);text-transform:uppercase;}
+.alert-row-wrap{border-bottom:1px solid var(--line);animation:rowIn .25s ease;}
+.alert-row-wrap:last-child{border-bottom:none;}
+@keyframes rowIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+.alert-row{display:grid;grid-template-columns:90px 110px 120px 1fr 70px 80px 28px;padding:0 16px;height:40px;align-items:center;cursor:pointer;transition:background .1s;}
+.alert-row:hover{background:rgba(0,0,0,.025);}
+.alert-row.open{background:var(--blue-dim);}
+.alert-row>*{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:10px;}
+.sev-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;padding:2px 7px;border-radius:2px;text-transform:uppercase;font-weight:500;border:1px solid;}
+.sev-CRITICAL{color:var(--red);border-color:rgba(220,38,38,.35);background:var(--red-dim);}
+.sev-HIGH{color:var(--orange);border-color:rgba(234,88,12,.35);background:var(--orange-dim);}
+.sev-MEDIUM{color:var(--yellow);border-color:rgba(180,83,9,.35);background:var(--yellow-dim);}
+.sev-LOW{color:var(--green);border-color:rgba(21,128,61,.3);background:var(--green-dim);}
+.sev-UNKNOWN{color:var(--slate);border-color:rgba(100,116,139,.3);background:transparent;}
+.sev-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.col-id{font-family:var(--mono);font-size:11px;color:var(--cyan);}
+.col-ip{font-family:var(--mono);font-size:11px;color:var(--ink2);}
+.col-atk{font-size:11px;}
+.atk-icmp{color:#0369a1;}.atk-portscan{color:#7c3aed;}.atk-ssh{color:#b45309;}
+.col-score{font-family:var(--mono);font-size:12px;}
+.col-time{font-family:var(--mono);font-size:10.5px;color:var(--ink3);}
+.col-expand{color:var(--ink4);font-size:9px;text-align:right;transition:transform .2s,color .15s;padding-right:0!important;user-select:none;}
+.col-expand.open{transform:rotate(180deg);color:var(--cyan);}
+
+/* DETAIL PANEL */
+.detail-panel{display:none;padding:20px;border-top:1px solid var(--line2);background:rgba(241,245,249,.7);gap:16px;}
+.detail-panel.open{display:grid;grid-template-columns:220px 1fr;}
+.detail-left{display:flex;flex-direction:column;gap:10px;}
+.d-block{background:var(--raised);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden;}
+.d-block-head{padding:7px 12px;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--ink4);text-transform:uppercase;border-bottom:1px solid var(--line);background:var(--surface);}
+.d-block-body{padding:12px;}
+.d-kv{display:flex;flex-direction:column;gap:6px;}
+.d-kv-row{display:flex;justify-content:space-between;gap:8px;}
+.d-kv-key{font-size:11px;color:var(--ink3);flex-shrink:0;}
+.d-kv-val{font-family:var(--mono);font-size:11px;color:var(--ink);text-align:right;word-break:break-all;}
+.score-ring-wrap{display:flex;align-items:center;gap:14px;padding:14px 12px;}
+.score-num{font-family:var(--mono);font-size:36px;font-weight:300;line-height:1;}
+.score-meta{display:flex;flex-direction:column;gap:3px;}
+.score-level{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;}
+.score-conf{font-size:10.5px;color:var(--ink3);}
+.score-bar-wrap{padding:0 12px 12px;}
+.score-track{height:3px;background:var(--line2);border-radius:2px;overflow:hidden;}
+.score-fill{height:100%;border-radius:2px;transition:width .7s cubic-bezier(.4,0,.2,1);}
+.detail-right{display:flex;flex-direction:column;gap:10px;}
+.mitre-row{display:flex;align-items:baseline;gap:10px;padding:10px 12px;}
+.mitre-id-big{font-family:var(--mono);font-size:16px;color:var(--cyan);flex-shrink:0;}
+.mitre-desc{font-size:12px;color:var(--ink2);line-height:1.4;}
+.mitre-tactic{font-size:11px;color:var(--ink3);}
+.actions-wrap{padding:12px;display:flex;flex-direction:column;gap:5px;}
+.action-item{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--ink2);padding:5px 8px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);}
+.action-bullet{font-family:var(--mono);font-size:10px;color:var(--cyan);margin-top:1px;flex-shrink:0;}
+.esc-bar{display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2);border-radius:var(--r2);font-family:var(--mono);font-size:10.5px;color:var(--red);letter-spacing:.06em;text-transform:uppercase;}
+.exec-wrap{padding:14px;font-size:12.5px;color:var(--ink2);line-height:1.7;border-left:2px solid var(--cyan);}
+.reasoning-wrap{padding:12px;font-size:11.5px;color:var(--ink3);line-height:1.65;}
+
+/* EMPTY */
+.empty{padding:56px 20px;text-align:center;}
+.empty-icon{font-family:var(--mono);font-size:22px;color:var(--ink4);margin-bottom:12px;}
+.empty-text{font-size:12px;color:var(--ink3);max-width:380px;margin:0 auto;line-height:1.6;}
+
+/* ── STATISTICS TAB ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.stats-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden;}
+.stats-card-head{padding:10px 16px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink3);text-transform:uppercase;border-bottom:1px solid var(--line);background:var(--raised);}
+.stats-card-body{padding:16px;}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.bar-row:last-child{margin-bottom:0;}
+.bar-label{font-size:11px;color:var(--ink2);width:120px;flex-shrink:0;}
+.bar-track{flex:1;height:8px;background:var(--line2);border-radius:4px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px;transition:width .6s ease;}
+.bar-count{font-family:var(--mono);font-size:11px;color:var(--ink3);width:24px;text-align:right;}
+.timeline-wrap{display:flex;flex-direction:column;gap:8px;}
+.tl-row{display:flex;align-items:center;gap:10px;}
+.tl-date{font-family:var(--mono);font-size:10.5px;color:var(--ink3);width:90px;flex-shrink:0;}
+.tl-track{flex:1;height:6px;background:var(--line2);border-radius:3px;overflow:hidden;}
+.tl-fill{height:100%;background:var(--cyan);border-radius:3px;transition:width .6s;}
+.tl-count{font-family:var(--mono);font-size:11px;color:var(--ink3);width:20px;text-align:right;}
+
+/* ── IP SUMMARY TAB ── */
+.ip-table{background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden;}
+.ip-tbl-head{display:grid;grid-template-columns:140px 1fr 80px 80px 100px;padding:0 16px;height:32px;align-items:center;background:var(--raised);border-bottom:1px solid var(--line2);}
+.ip-tbl-head span{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:var(--ink4);text-transform:uppercase;}
+.ip-tbl-row{display:grid;grid-template-columns:140px 1fr 80px 80px 100px;padding:0 16px;height:38px;align-items:center;border-bottom:1px solid var(--line);font-size:12px;}
+.ip-tbl-row:last-child{border-bottom:none;}
+.ip-tbl-row:hover{background:rgba(0,0,0,.02);}
+.ip-cell-ip{font-family:var(--mono);font-size:11px;color:var(--cyan);}
+.ip-cell-atk{font-size:11px;}
+.ip-cell-score{font-family:var(--mono);font-size:12px;}
+.ip-cell-pkts{font-family:var(--mono);font-size:11px;color:var(--ink3);}
+.ip-cell-time{font-family:var(--mono);font-size:10.5px;color:var(--ink3);}
+
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--ink4);border-radius:3px;}
+@media(max-width:1100px){#sidebar{display:none;}.metric-row{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:700px){.metric-row{grid-template-columns:1fr 1fr;}.tbl-head,.alert-row{grid-template-columns:80px 100px 1fr 60px 22px;}.detail-panel.open{grid-template-columns:1fr;}.stats-grid{grid-template-columns:1fr;}}
+
+/* ── CAPTURE OVERLAY ── */
+#capture-overlay{
+  position:fixed;inset:0;z-index:9999;
+  background:#f1f5f9;
+  display:grid;grid-template-columns:1fr 1fr;
+  opacity:0;pointer-events:none;transition:opacity .3s;
+  overflow:hidden;
+}
+#capture-overlay.active{opacity:1;pointer-events:all;}
+
+/* LEFT PANEL — pipeline steps */
+.co-left{
+  padding:48px 40px;
+  border-right:1px solid rgba(0,0,0,.08);
+  display:flex;flex-direction:column;
+  overflow-y:auto;
+}
+.co-title{
+  font-family:var(--mono);font-size:10px;letter-spacing:.22em;
+  color:#64748b;text-transform:uppercase;margin-bottom:36px;
+  display:flex;align-items:center;gap:10px;
+}
+.co-title-dot{width:7px;height:7px;border-radius:50%;background:#06b6d4;animation:blink 1s infinite;flex-shrink:0;}
+
+.co-steps{display:flex;flex-direction:column;gap:0;flex:1;}
+.co-step{
+  display:flex;align-items:flex-start;gap:18px;
+  padding:18px 0;border-bottom:1px solid rgba(255,255,255,.04);
+  opacity:.2;transition:opacity .5s,transform .3s;
+  transform:translateX(-4px);
+}
+.co-step.active,
+.co-step.done{opacity:1;transform:translateX(0);}
+.co-step:last-child{border-bottom:none;}
+
+.co-step-icon{
+  width:44px;height:44px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;
+  background:rgba(0,0,0,.03);border:1px solid rgba(0,0,0,.08);
+  transition:all .4s;
+}
+.co-step.active .co-step-icon{
+  border-color:rgba(3,105,161,.5);
+  background:rgba(3,105,161,.1);
+  box-shadow:0 0 20px rgba(3,105,161,.12);
+}
+.co-step.done .co-step-icon{
+  border-color:rgba(21,128,61,.4);
+  background:rgba(21,128,61,.08);
+}
+
+.co-step-right{flex:1;min-width:0;}
+.co-step-label{
+  font-family:var(--mono);font-size:14px;color:#94a3b8;
+  letter-spacing:.04em;margin-bottom:4px;
+}
+.co-step.active .co-step-label{color:#0f172a;}
+.co-step.done   .co-step-label{color:#94a3b8;}
+
+.co-step-sub{
+  font-size:12px;color:#334155;line-height:1.5;
+  min-height:18px;transition:color .3s;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.co-step.active .co-step-sub{color:#475569;}
+.co-step.done   .co-step-sub{color:#94a3b8;}
+
+/* progress connector */
+.co-step-connector{
+  width:2px;height:24px;background:rgba(0,0,0,.06);
+  margin-left:21px;flex-shrink:0;
+  transition:background .4s;
+}
+.co-step.done + .co-step-connector,
+.co-step-connector.lit{background:rgba(21,128,61,.35);}
+
+.co-step-tick{
+  font-size:16px;color:#15803d;flex-shrink:0;
+  opacity:0;transition:opacity .3s;margin-top:14px;
+}
+.co-step.done .co-step-tick{opacity:1;}
+
+/* RIGHT PANEL — live stream + result */
+.co-right{
+  padding:48px 40px;
+  display:flex;flex-direction:column;gap:20px;
+  overflow-y:auto;
+}
+.co-right-title{
+  font-family:var(--mono);font-size:10px;letter-spacing:.22em;
+  color:#64748b;text-transform:uppercase;
+}
+
+/* live packet stream */
+.co-pkt-stream{
+  flex:1;min-height:0;
+  background:#ffffff;border:1px solid rgba(0,0,0,.09);
+  border-radius:8px;padding:18px 16px;
+  display:flex;flex-direction:column;gap:5px;
+  overflow:hidden;font-family:var(--mono);font-size:12px;
+  max-height:320px;
+}
+.co-pkt-line{
+  color:#94a3b8;animation:fadeUp .25s ease;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  line-height:1.6;
+}
+.co-pkt-line.new{color:#0369a1;}
+.co-pkt-line.alert{color:#ea580c;}
+.co-pkt-line.success{color:#15803d;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+/* live counter bar */
+.co-pkt-counter{
+  display:flex;align-items:baseline;gap:8px;
+  padding:16px 0 4px;
+}
+.co-pkt-num{
+  font-family:var(--mono);font-size:48px;font-weight:300;
+  color:#0369a1;line-height:1;
+}
+.co-pkt-label{font-size:12px;color:#64748b;letter-spacing:.04em;}
+
+/* result card */
+.co-result{
+  background:#ffffff;border:1px solid rgba(0,0,0,.09);
+  border-radius:10px;padding:20px;
+  display:none;animation:fadeUp .4s ease;
+}
+.co-result.show{display:block;}
+.co-result-head{
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+  color:#64748b;text-transform:uppercase;margin-bottom:14px;
+  padding-bottom:10px;border-bottom:1px solid rgba(0,0,0,.07);
+}
+.co-result-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.co-result-kv{
+  background:#f8fafc;border:1px solid rgba(0,0,0,.07);
+  border-radius:6px;padding:10px 12px;
+  display:flex;flex-direction:column;gap:3px;
+}
+.co-result-key{font-size:10px;color:#64748b;letter-spacing:.06em;text-transform:uppercase;}
+.co-result-val{font-family:var(--mono);font-size:13px;color:#0f172a;}
+.co-result-val.red{color:#ef4444;}.co-result-val.orange{color:#f97316;}
+.co-result-val.yellow{color:#eab308;}.co-result-val.green{color:#22c55e;}
+
+.co-back-btn{
+  width:100%;font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+  padding:13px;border-radius:6px;border:1px solid rgba(3,105,161,.4);
+  background:transparent;color:#0369a1;cursor:pointer;text-transform:uppercase;
+  transition:all .15s;display:none;
+}
+.co-back-btn.show{display:block;}
+.co-back-btn:hover{background:rgba(3,105,161,.08);}
+
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="tb-brand"><div class="live-dot" id="top-live-dot"></div>AI Network Threat Triage</div>
+  <nav class="tb-nav">
+    <a class="active" onclick="switchTab('feed',this)">Alert Feed</a>
+    <a onclick="switchTab('stats',this)">Statistics</a>
+    <a onclick="switchTab('ips',this)">IP Summary</a>
+  </nav>
+  <div class="tb-right">
+    <span id="clock"></span>
+    <button class="pill-btn success" onclick="exportJSON()">⬇ Export</button>
+    <button class="pill-btn ghost" onclick="clearLog()">Clear</button>
+  </div>
+</div>
+
+<div id="shell">
+  <aside id="sidebar">
+
+    <div class="capture-block">
+      <div class="sb-status-label">Universal Capture</div>
+      <button class="run-btn-big" id="run-btn" onclick="triggerCapture()">▶ Start Capture</button>
+
+      <div class="status-row">
+        <span id="sb-status-dot"></span>
+        <span id="sb-status-text">Idle — ready to capture</span>
+      </div>
+
+      <div class="live-counter" id="live-counter">
+        <div class="lc-label">Live Packets</div>
+        <div><span class="lc-num" id="lc-num">0</span><span class="lc-unit">pkts captured</span></div>
+        <div class="lc-breakdown" id="lc-breakdown"></div>
+      </div>
+
+      <div class="detected-badge" id="detected-badge"></div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Alert Counts</div>
+      <div class="kv-row"><span class="kv-key">Total</span>    <span class="kv-val t" id="sb-total">0</span></div>
+      <div class="kv-row"><span class="kv-key">Critical</span> <span class="kv-val c" id="sb-crit">0</span></div>
+      <div class="kv-row"><span class="kv-key">High</span>     <span class="kv-val h" id="sb-high">0</span></div>
+      <div class="kv-row"><span class="kv-key">Medium</span>   <span class="kv-val m" id="sb-med">0</span></div>
+      <div class="kv-row"><span class="kv-key">Low</span>      <span class="kv-val l" id="sb-low">0</span></div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Target</div>
+      <div class="kv-row"><span class="kv-key">Host</span>      <span class="kv-val">Internal-server</span></div>
+      <div class="kv-row"><span class="kv-key">IP</span>        <span class="kv-val">YOUR_SERVER_IP</span></div>
+      <div class="kv-row"><span class="kv-key">Interface</span> <span class="kv-val">eth0</span></div>
+      <div class="kv-row"><span class="kv-key">Window</span>    <span class="kv-val">60s</span></div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Session</div>
+      <div class="kv-row"><span class="kv-key">Analyst</span> <span class="kv-val">Tier-1</span></div>
+      <div class="kv-row"><span class="kv-key">Engine</span>  <span class="kv-val">Airia AI</span></div>
+    </div>
+  </aside>
+
+  <main id="content">
+
+    <!-- FEED TAB -->
+    <div class="tab-pane active" id="tab-feed">
+      <div class="metric-row">
+        <div class="metric all">  <div class="metric-label">Total Alerts</div><div class="metric-value" id="m-total">0</div></div>
+        <div class="metric crit"> <div class="metric-label">Critical</div>    <div class="metric-value" id="m-crit">0</div></div>
+        <div class="metric high"> <div class="metric-label">High</div>        <div class="metric-value" id="m-high">0</div></div>
+        <div class="metric med">  <div class="metric-label">Medium</div>      <div class="metric-value" id="m-med">0</div></div>
+        <div class="metric low">  <div class="metric-label">Low</div>         <div class="metric-value" id="m-low">0</div></div>
+      </div>
+      <div class="feed-header">
+        <span class="feed-title">// Alert Feed</span>
+        <span class="feed-meta" id="feed-count">0 events</span>
+      </div>
+      <div id="alert-table">
+        <div class="tbl-head">
+          <span>Severity</span><span>Alert ID</span><span>Source IP</span>
+          <span>Classification</span><span>Score</span><span>Time</span><span></span>
+        </div>
+        <div id="rows-container">
+          <div class="empty"><div class="empty-icon">[ _ ]</div>
+            <div class="empty-text">No alerts yet — click Start Capture. The system auto-detects ICMP flood, port scans and SSH brute force.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATISTICS TAB -->
+    <div class="tab-pane" id="tab-stats">
+      <div class="feed-header">
+        <span class="feed-title">// Statistics</span>
+        <button class="pill-btn primary" onclick="loadStats()">↻ Refresh</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stats-card">
+          <div class="stats-card-head">Alerts by Attack Type</div>
+          <div class="stats-card-body" id="chart-attack"><div style="font-size:11px;color:var(--ink3)">No data yet.</div></div>
+        </div>
+        <div class="stats-card">
+          <div class="stats-card-head">Alerts by Risk Level</div>
+          <div class="stats-card-body" id="chart-risk"><div style="font-size:11px;color:var(--ink3)">No data yet.</div></div>
+        </div>
+        <div class="stats-card" style="grid-column:1/-1">
+          <div class="stats-card-head">Alert Timeline</div>
+          <div class="stats-card-body" id="chart-timeline"><div style="font-size:11px;color:var(--ink3)">No data yet.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IP SUMMARY TAB -->
+    <div class="tab-pane" id="tab-ips">
+      <div class="feed-header">
+        <span class="feed-title">// IP Summary</span>
+        <button class="pill-btn primary" onclick="loadIPs()">↻ Refresh</button>
+      </div>
+      <div class="ip-table">
+        <div class="ip-tbl-head">
+          <span>Source IP</span><span>Classification</span><span>Score</span><span>Packets</span><span>Last Seen</span>
+        </div>
+        <div id="ip-rows"><div class="empty" style="padding:32px"><div class="empty-text">No IP data yet.</div></div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+'use strict';
+const seenIds = new Set();
+
+// ── Clock ──
+function tick(){
+  const n=new Date();
+  document.getElementById('clock').textContent=
+    n.getUTCFullYear()+'-'+String(n.getUTCMonth()+1).padStart(2,'0')+'-'+
+    String(n.getUTCDate()).padStart(2,'0')+' '+
+    String(n.getUTCHours()).padStart(2,'0')+':'+
+    String(n.getUTCMinutes()).padStart(2,'0')+':'+
+    String(n.getUTCSeconds()).padStart(2,'0')+' UTC';
+}
+setInterval(tick,1000);tick();
+
+// ── Tabs ──
+function switchTab(name,el){
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tb-nav a').forEach(a=>a.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  el.classList.add('active');
+  if(name==='stats') loadStats();
+  if(name==='ips')   loadIPs();
+}
+
+// ── Helpers ──
+function levelOf(raw){
+  if(!raw) return 'UNKNOWN';
+  const u=raw.toUpperCase();
+  if(u.includes('CRITICAL')) return 'CRITICAL';
+  if(u.includes('HIGH'))     return 'HIGH';
+  if(u.includes('MEDIUM'))   return 'MEDIUM';
+  if(u.includes('LOW'))      return 'LOW';
+  return 'UNKNOWN';
+}
+function scoreColor(s){
+  if(s>=80) return 'var(--red)';
+  if(s>=60) return 'var(--orange)';
+  if(s>=30) return 'var(--yellow)';
+  return 'var(--green)';
+}
+function fmtTs(iso){
+  if(!iso) return '—';
+  try{return new Date(iso).toISOString().replace('T',' ').slice(0,16);}catch{return iso;}
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+const atkLabel={icmp:'ICMP Flood',portscan:'Port Scan',ssh:'SSH Brute Force'};
+const atkClass={icmp:'atk-icmp',portscan:'atk-portscan',ssh:'atk-ssh'};
+
+// ── Build alert row ──
+function buildEntry(entry){
+  const alert=entry.alert||{};
+  const triage=entry.triage||{};
+  const id=alert.alert_id||('?-'+Math.random());
+  const ip=alert.indicator_value||'—';
+  const score=typeof triage.risk_score==='number'?triage.risk_score:null;
+  const level=levelOf(triage.risk_level);
+  const threat=triage.threat_classification||alert.alert_type||'—';
+  const atk=entry.attack_type||'';
+  const ts=fmtTs(entry.timestamp);
+  const mitre=triage.mitre_mapping||{};
+  const actions=Array.isArray(triage.recommended_actions)?triage.recommended_actions:[];
+  const scoreNum=score!==null?score:0;
+  const fillColor=score!==null?scoreColor(score):'var(--slate)';
+  const conf=triage.confidence_level||'—';
+  const safeId=id.replace(/[^a-zA-Z0-9\-_]/g,'_');
+  const ev=alert.evidence||{};
+
+  const actHtml=actions.length
+    ?actions.map(a=>`<div class="action-item"><span class="action-bullet">›</span>${esc(a)}</div>`).join('')
+    :'<div style="font-size:11px;color:var(--ink4);padding:4px 0">No actions provided.</div>';
+
+  let extraHtml='';
+  if(ev.unique_ports_scanned){
+    extraHtml=`<div class="d-kv-row"><span class="d-kv-key">Ports Hit</span><span class="d-kv-val">${esc(ev.unique_ports_scanned.slice(0,10).join(', '))}${ev.unique_ports_scanned.length>10?'…':''}</span></div>`;
+  }
+  if(ev.target_port){
+    extraHtml=`<div class="d-kv-row"><span class="d-kv-key">Target Port</span><span class="d-kv-val">${esc(ev.target_port)}</span></div>`;
+  }
+
+  const wrap=document.createElement('div');
+  wrap.className='alert-row-wrap';
+  wrap.id=`wrap-${safeId}`;
+  wrap.innerHTML=`
+  <div class="alert-row" onclick="toggleRow('${safeId}')" id="row-${safeId}">
+    <div><span class="sev-chip sev-${level}"><span class="sev-dot"></span>${level}</span></div>
+    <div class="col-id">${esc(id)}</div>
+    <div class="col-ip">${esc(ip)}</div>
+    <div class="col-atk ${atkClass[atk]||''}">${esc(atkLabel[atk]||atk||'—')}</div>
+    <div class="col-score" style="color:${fillColor}">${score!==null?score:'—'}</div>
+    <div class="col-time">${esc(ts)}</div>
+    <div class="col-expand" id="chev-${safeId}">▼</div>
+  </div>
+  <div class="detail-panel" id="panel-${safeId}">
+    <div class="detail-left">
+      <div class="d-block">
+        <div class="d-block-head">Risk Assessment</div>
+        <div class="score-ring-wrap">
+          <div class="score-num" style="color:${fillColor}">${score!==null?score:'—'}</div>
+          <div class="score-meta">
+            <div class="score-level" style="color:${fillColor}">${level}</div>
+            <div class="score-conf">Confidence: ${esc(conf)}</div>
+          </div>
+        </div>
+        <div class="score-bar-wrap"><div class="score-track"><div class="score-fill" style="width:${scoreNum}%;background:${fillColor}"></div></div></div>
+      </div>
+      <div class="d-block">
+        <div class="d-block-head">Alert Metadata</div>
+        <div class="d-block-body"><div class="d-kv">
+          <div class="d-kv-row"><span class="d-kv-key">Alert ID</span>  <span class="d-kv-val">${esc(id)}</span></div>
+          <div class="d-kv-row"><span class="d-kv-key">Source IP</span> <span class="d-kv-val">${esc(ip)}</span></div>
+          <div class="d-kv-row"><span class="d-kv-key">Dest IP</span>   <span class="d-kv-val">${esc(alert.destination_ip||'—')}</span></div>
+          <div class="d-kv-row"><span class="d-kv-key">Protocol</span>  <span class="d-kv-val">${esc(alert.protocol||'—')}</span></div>
+          <div class="d-kv-row"><span class="d-kv-key">Packets</span>   <span class="d-kv-val">${esc(ev.packet_count??'—')}</span></div>
+          <div class="d-kv-row"><span class="d-kv-key">Window</span>    <span class="d-kv-val">${esc(ev.time_window_seconds??'—')}s</span></div>
+          ${extraHtml}
+        </div></div>
+      </div>
+    </div>
+    <div class="detail-right">
+      ${triage.escalation_required?'<div class="esc-bar">⬆ Escalation required — Immediate Tier 2 response</div>':''}
+      <div class="d-block">
+        <div class="d-block-head">MITRE ATT&amp;CK</div>
+        <div class="mitre-row">
+          <span class="mitre-id-big">${esc(mitre.technique_id||'—')}</span>
+          <div><div class="mitre-desc">${esc(mitre.technique_name||'—')}</div>
+          <div class="mitre-tactic">${esc(mitre.tactic||'')}</div></div>
+        </div>
+      </div>
+      <div class="d-block">
+        <div class="d-block-head">Recommended Actions</div>
+        <div class="actions-wrap">${actHtml}</div>
+      </div>
+      <div class="d-block">
+        <div class="d-block-head">Executive Summary</div>
+        <div class="exec-wrap">${esc(triage.executive_summary||'No summary available.')}</div>
+      </div>
+      ${triage.analysis_reasoning?`
+      <div class="d-block">
+        <div class="d-block-head">Analysis Reasoning</div>
+        <div class="reasoning-wrap">${esc(triage.analysis_reasoning)}</div>
+      </div>`:''}
+    </div>
+  </div>`;
+  return wrap;
+}
+
+function toggleRow(id){
+  document.getElementById(`panel-${id}`).classList.toggle('open');
+  document.getElementById(`row-${id}`).classList.toggle('open');
+  document.getElementById(`chev-${id}`).classList.toggle('open');
+}
+
+// ── Update counts ──
+function updateStats(entries){
+  const c={CRITICAL:0,HIGH:0,MEDIUM:0,LOW:0};
+  entries.forEach(e=>{const l=levelOf(e.triage?.risk_level);if(c[l]!==undefined)c[l]++;});
+  const t=entries.length;
+  ['total','crit','high','med','low'].forEach((k,i)=>{
+    const v=[t,c.CRITICAL,c.HIGH,c.MEDIUM,c.LOW][i];
+    document.getElementById(`m-${k}`).textContent=v;
+    document.getElementById(`sb-${k}`).textContent=v;
+  });
+  document.getElementById('feed-count').textContent=`${t} event${t!==1?'s':''}`;
+}
+
+// ── Poll alerts ──
+async function fetchAlerts(){
+  try{
+    const data=await fetch('/api/alerts').then(r=>r.json());
+    updateStats(data);
+    const container=document.getElementById('rows-container');
+    const newEntries=data.filter(e=>e.alert?.alert_id&&!seenIds.has(e.alert.alert_id));
+    if(data.length>0&&container.querySelector('.empty')) container.innerHTML='';
+    newEntries.forEach(entry=>{
+      seenIds.add(entry.alert.alert_id);
+      container.insertBefore(buildEntry(entry),container.firstChild);
+    });
+    if(data.length===0&&!container.querySelector('.empty')){
+      seenIds.clear();
+      container.innerHTML=`<div class="empty"><div class="empty-icon">[ _ ]</div><div class="empty-text">Log cleared.</div></div>`;
+    }
+  }catch(e){}
+}
+
+// ── Poll status + live counter ──
+async function fetchStatus(){
+  try{
+    const data=await fetch('/api/status').then(r=>r.json());
+    const dot=document.getElementById('sb-status-dot');
+    const txt=document.getElementById('sb-status-text');
+    const btn=document.getElementById('run-btn');
+    const ldot=document.getElementById('top-live-dot');
+    const lc=document.getElementById('live-counter');
+    const badge=document.getElementById('detected-badge');
+
+    txt.textContent=data.message||'Idle';
+
+    if(data.running){
+      dot.classList.add('running');
+      ldot.classList.add('blink');
+      ldot.style.background='#b45309';
+      btn.disabled=true;
+      btn.textContent='⏳ Capturing...';
+      lc.classList.add('active');
+
+      // live packet count
+      document.getElementById('lc-num').textContent=data.live_packets||0;
+
+      // breakdown
+      const bd=data.live_breakdown||{};
+      const bdEl=document.getElementById('lc-breakdown');
+      const entries=Object.entries(bd).sort((a,b)=>b[1]-a[1]);
+      bdEl.innerHTML=entries.length
+        ?entries.map(([ip,cnt])=>`<div class="lc-row"><span class="lc-ip">${esc(ip)}</span><span class="lc-cnt">${cnt}</span></div>`).join('')
+        :'';
+
+      badge.classList.remove('show');
+    } else {
+      dot.classList.remove('running');
+      ldot.classList.remove('blink');
+      ldot.style.background='#16a34a';
+      btn.disabled=false;
+      btn.textContent='▶ Start Capture';
+
+      // keep last count visible but stop blinking
+      if(data.live_packets>0){
+        document.getElementById('lc-num').textContent=data.live_packets;
+      }
+
+      // show detected type badge
+      if(data.attack_type){
+        badge.textContent='Detected: '+({icmp:'ICMP Flood',portscan:'Port Scan',ssh:'SSH Brute Force'}[data.attack_type]||data.attack_type);
+        badge.className=`detected-badge show ${data.attack_type}`;
+      } else if(data.message.startsWith('Done')){
+        badge.classList.remove('show');
+      }
+    }
+  }catch(e){}
+}
+
+// ── Overlay state ──
+let overlayInterval = null;
+let overlayPhase = 0;
+let pktLines = [];
+
+function openOverlay(){
+  overlayPhase = 0;
+  pktLines = [];
+  // reset steps
+  [1,2,3,4,5].forEach(i=>{
+    const s=document.getElementById(`cs-${i}`);
+    s.classList.remove('active','done');
+    document.getElementById(`cs-${i}-sub`).textContent='Waiting...';
+  });
+  document.getElementById('co-result').classList.remove('show');
+  document.getElementById('co-back-btn').classList.remove('show');
+  document.getElementById('co-pkt-stream').innerHTML='';
+  document.getElementById('capture-overlay').classList.add('active');
+}
+
+function closeOverlay(){
+  document.getElementById('capture-overlay').classList.remove('active');
+  if(overlayInterval){ clearInterval(overlayInterval); overlayInterval=null; }
+}
+
+function addPktLine(text, cls=''){
+  const stream = document.getElementById('co-pkt-stream');
+  // remove 'new' from previous
+  stream.querySelectorAll('.co-pkt-line.new').forEach(el=>el.classList.remove('new'));
+  const line = document.createElement('div');
+  line.className = 'co-pkt-line new' + (cls?' '+cls:'');
+  line.textContent = text;
+  stream.appendChild(line);
+  // keep max 8 lines
+  while(stream.children.length > 8) stream.removeChild(stream.firstChild);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function setStep(n, subtext, done=false){
+  const el = document.getElementById(`cs-${n}`);
+  document.getElementById(`cs-${n}-sub`).textContent = subtext;
+  if(done){
+    el.classList.remove('active');
+    el.classList.add('done');
+  } else {
+    el.classList.add('active');
+    el.classList.remove('done');
+  }
+}
+
+function activateNext(n){ setStep(n,'Running...'); }
+
+function watchOverlay(lastPkts){
+  fetch('/api/status').then(r=>r.json()).then(data=>{
+    const msg = data.message || '';
+    const pkts = data.live_packets || 0;
+    const breakdown = data.live_breakdown || {};
+
+    // Phase 0 → 1: capturing
+    if(overlayPhase===0){
+      overlayPhase=1;
+      setStep(1, `Capturing on eth0 — 60s window`);
+      addPktLine('[ tshark ] capture started on eth0...');
+      addPktLine('[ filter ] (icmp or tcp) dst YOUR_SERVER_IP');
+    }
+
+    // Live packet ticks
+    if(pkts > lastPkts){
+      const diff = pkts - lastPkts;
+      const ips = Object.entries(breakdown).sort((a,b)=>b[1]-a[1]);
+      if(ips.length){
+        const [topIp, topCnt] = ips[0];
+        addPktLine(`[ pkt  ] ${topIp}  →  ${topCnt} packets`);
+      }
+      // update sidebar too
+      document.getElementById('lc-num').textContent = pkts;
+      document.getElementById('co-pkt-num').textContent = pkts;
+    }
+
+    // Phase transitions based on status message
+    if(overlayPhase===1 && msg.includes('Analyzing')){
+      overlayPhase=2;
+      setStep(1, `Captured ${pkts} packets`, true);
+      setStep(2, 'Parsing pcap with tshark...');
+      addPktLine('[ tshark ] capture complete — parsing pcap...');
+    }
+    if(overlayPhase===2 && (msg.includes('Detected') || msg.includes('sending'))){
+      overlayPhase=3;
+      setStep(2, 'ICMP/TCP/SSH patterns checked', true);
+      setStep(3, 'Matching thresholds...');
+      addPktLine('[ detect ] checking ICMP flood / port scan / SSH brute...', 'alert');
+    }
+    if(overlayPhase===3 && msg.includes('sending to Airia')){
+      overlayPhase=4;
+      const atkRaw = data.attack_type||'';
+      const atkName = {icmp:'ICMP Flood',portscan:'Port Scan',ssh:'SSH Brute Force'}[atkRaw]||atkRaw||'Unknown';
+      setStep(3, `Detected: ${atkName}`, true);
+      setStep(4, 'Sending alert JSON to Airia...');
+      addPktLine(`[ alert ] attack type: ${atkName}`, 'alert');
+      addPktLine('[ airia ] sending alert to AI triage engine...');
+    }
+    if(overlayPhase===4 && !data.running && msg.includes('Done')){
+      overlayPhase=5;
+      setStep(4, 'AI triage response received', true);
+      setStep(5, 'Report saved to alert log', true);
+      addPktLine('[ airia ] triage complete ✓', 'new');
+      addPktLine('[ log   ] alert written to alerts_log.json');
+      // show result card
+      showResultCard();
+      clearInterval(overlayInterval); overlayInterval=null;
+    }
+    if(!data.running && msg.includes('no suspicious')){
+      overlayPhase=5;
+      setStep(1,'Capture complete',true);
+      setStep(2,'No thresholds exceeded',true);
+      setStep(3,'No attack detected',true);
+      addPktLine('[ info  ] no suspicious activity detected');
+      document.getElementById('co-back-btn').classList.add('show');
+      clearInterval(overlayInterval); overlayInterval=null;
+    }
+    if(msg.startsWith('Error')){
+      addPktLine('[ error ] '+msg, 'alert');
+      document.getElementById('co-back-btn').classList.add('show');
+      clearInterval(overlayInterval); overlayInterval=null;
+    }
+
+    // schedule next tick storing current pkt count
+    if(overlayInterval) overlayInterval.__lastPkts = pkts;
+  }).catch(()=>{});
+}
+
+async function showResultCard(){
+  try{
+    const data = await fetch('/api/alerts').then(r=>r.json());
+    if(!data.length) return;
+    const latest = data[0];
+    const triage = latest.triage||{};
+    const alert  = latest.alert||{};
+    const score  = triage.risk_score??'—';
+    const level  = triage.risk_level||'—';
+    const mitre  = (triage.mitre_mapping||{});
+    const sc = typeof score==='number' ? score : 0;
+    const cls = sc>=80?'red':sc>=60?'orange':sc>=30?'yellow':'green';
+    document.getElementById('co-result-grid').innerHTML=`
+      <div class="co-result-kv"><div class="co-result-key">Alert ID</div><div class="co-result-val">${esc(alert.alert_id||'—')}</div></div>
+      <div class="co-result-kv"><div class="co-result-key">Source IP</div><div class="co-result-val">${esc(alert.indicator_value||'—')}</div></div>
+      <div class="co-result-kv"><div class="co-result-key">Risk Score</div><div class="co-result-val ${cls}">${score} / 100</div></div>
+      <div class="co-result-kv"><div class="co-result-key">Risk Level</div><div class="co-result-val ${cls}">${esc(level)}</div></div>
+      <div class="co-result-kv"><div class="co-result-key">MITRE</div><div class="co-result-val">${esc(mitre.technique_id||'—')}</div></div>
+      <div class="co-result-kv"><div class="co-result-key">Packets</div><div class="co-result-val">${esc(alert.evidence?.packet_count||'—')}</div></div>
+    `;
+    document.getElementById('co-result').classList.add('show');
+    document.getElementById('co-back-btn').classList.add('show');
+    // auto-close after 6s
+    setTimeout(()=>{ closeOverlay(); fetchAlerts(); }, 6000);
+  }catch(e){}
+}
+
+// ── Trigger ──
+async function triggerCapture(){
+  try{
+    const r=await fetch('/api/trigger',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(d.error){ alert(d.error); return; }
+    // reset sidebar
+    document.getElementById('lc-num').textContent='0';
+    document.getElementById('lc-breakdown').innerHTML='';
+    document.getElementById('detected-badge').classList.remove('show');
+    // open overlay
+    openOverlay();
+    let lastPkts = 0;
+    overlayInterval = setInterval(()=>{
+      watchOverlay(lastPkts);
+      lastPkts = parseInt(document.getElementById('lc-num').textContent)||0;
+    }, 1500);
+  }catch(e){alert('Failed: '+e.message);}
+}
+
+// ── Clear ──
+async function clearLog(){
+  if(!confirm('Clear all alerts?')) return;
+  await fetch('/api/clear',{method:'POST'});
+  seenIds.clear();
+  document.getElementById('rows-container').innerHTML=
+    `<div class="empty"><div class="empty-icon">[ _ ]</div><div class="empty-text">Log cleared.</div></div>`;
+  updateStats([]);
+}
+
+// ── Export ──
+function exportJSON(){window.open('/api/export');}
+
+// ── Statistics tab ──
+async function loadStats(){
+  try{
+    const d=await fetch('/api/stats').then(r=>r.json());
+    const maxV=v=>Math.max(1,...Object.values(v));
+    const atkColors={icmp:'var(--cyan)',portscan:'var(--purple)',ssh:'var(--yellow)'};
+    const atkLabels={icmp:'ICMP Flood',portscan:'Port Scan',ssh:'SSH Brute Force'};
+    let h='';
+    const am=maxV(Object.keys(d.by_attack_type).length?d.by_attack_type:{x:1});
+    for(const[k,v] of Object.entries(d.by_attack_type)){
+      const color=atkColors[k]||'var(--slate)';
+      h+=`<div class="bar-row"><div class="bar-label">${esc(atkLabels[k]||k)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(v/am*100)}%;background:${color}"></div></div><div class="bar-count">${v}</div></div>`;
+    }
+    document.getElementById('chart-attack').innerHTML=h||'<div style="font-size:11px;color:var(--ink3)">No data yet.</div>';
+
+    const riskColors={Critical:'var(--red)',High:'var(--orange)',Medium:'var(--yellow)',Low:'var(--green)',Unknown:'var(--slate)'};
+    let rh='';
+    const rm=maxV(Object.keys(d.by_risk_level).length?d.by_risk_level:{x:1});
+    for(const[k,v] of Object.entries(d.by_risk_level)){
+      rh+=`<div class="bar-row"><div class="bar-label">${esc(k)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(v/rm*100)}%;background:${riskColors[k]||'var(--slate)'}"></div></div><div class="bar-count">${v}</div></div>`;
+    }
+    document.getElementById('chart-risk').innerHTML=rh||'<div style="font-size:11px;color:var(--ink3)">No data yet.</div>';
+
+    const days=Object.entries(d.timeline).sort((a,b)=>a[0]<b[0]?-1:1);
+    const tlMax=Math.max(1,...days.map(x=>x[1]));
+    let th=days.map(([day,cnt])=>`<div class="tl-row"><div class="tl-date">${esc(day)}</div><div class="tl-track"><div class="tl-fill" style="width:${Math.round(cnt/tlMax*100)}%"></div></div><div class="tl-count">${cnt}</div></div>`).join('');
+    document.getElementById('chart-timeline').innerHTML=th?`<div class="timeline-wrap">${th}</div>`:'<div style="font-size:11px;color:var(--ink3)">No timeline data yet.</div>';
+  }catch(e){}
+}
+
+// ── IP Summary tab ──
+async function loadIPs(){
+  try{
+    const data=await fetch('/api/alerts').then(r=>r.json());
+    const ipMap={};
+    data.forEach(entry=>{
+      const ip=entry.alert?.indicator_value;
+      if(!ip) return;
+      if(!ipMap[ip]||entry.timestamp>ipMap[ip].timestamp){
+        ipMap[ip]={
+          ip,
+          classification:entry.triage?.threat_classification||entry.alert?.alert_type||'—',
+          score:entry.triage?.risk_score??'—',
+          packets:entry.alert?.evidence?.packet_count??'—',
+          timestamp:entry.timestamp||'',
+          attack_type:entry.attack_type||''
+        };
+      }
+    });
+    const rows=Object.values(ipMap).sort((a,b)=>b.timestamp.localeCompare(a.timestamp));
+    const el=document.getElementById('ip-rows');
+    if(!rows.length){
+      el.innerHTML='<div class="empty" style="padding:32px"><div class="empty-text">No IP data yet.</div></div>';
+      return;
+    }
+    el.innerHTML=rows.map(r=>{
+      const sc=typeof r.score==='number'?r.score:null;
+      const fc=sc!==null?scoreColor(sc):'var(--slate)';
+      return `<div class="ip-tbl-row">
+        <div class="ip-cell-ip">${esc(r.ip)}</div>
+        <div class="ip-cell-atk ${atkClass[r.attack_type]||''}">${esc(atkLabel[r.attack_type]||r.attack_type||'—')}</div>
+        <div class="ip-cell-score" style="color:${fc}">${sc!==null?sc:'—'}</div>
+        <div class="ip-cell-pkts">${esc(r.packets)}</div>
+        <div class="ip-cell-time">${fmtTs(r.timestamp)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){}
+}
+
+// ── Boot ──
+fetchAlerts(); fetchStatus();
+setInterval(fetchAlerts,3000);
+setInterval(fetchStatus,1500);
+</script>
+
+<!-- CAPTURE OVERLAY -->
+<div id="capture-overlay">
+  <!-- LEFT: Pipeline steps -->
+  <div class="co-left">
+    <div class="co-title"><div class="co-title-dot"></div>Live Capture Pipeline</div>
+    <div class="co-steps">
+      <div class="co-step" id="cs-1">
+        <div class="co-step-icon">📡</div>
+        <div class="co-step-right">
+          <div class="co-step-label">Packet Capture</div>
+          <div class="co-step-sub" id="cs-1-sub">Waiting...</div>
+        </div>
+        <div class="co-step-tick">✓</div>
+      </div>
+      <div class="co-step" id="cs-2">
+        <div class="co-step-icon">🔬</div>
+        <div class="co-step-right">
+          <div class="co-step-label">Traffic Analysis</div>
+          <div class="co-step-sub" id="cs-2-sub">Waiting...</div>
+        </div>
+        <div class="co-step-tick">✓</div>
+      </div>
+      <div class="co-step" id="cs-3">
+        <div class="co-step-icon">🎯</div>
+        <div class="co-step-right">
+          <div class="co-step-label">Attack Detection</div>
+          <div class="co-step-sub" id="cs-3-sub">Waiting...</div>
+        </div>
+        <div class="co-step-tick">✓</div>
+      </div>
+      <div class="co-step" id="cs-4">
+        <div class="co-step-icon">🤖</div>
+        <div class="co-step-right">
+          <div class="co-step-label">Airia AI Triage</div>
+          <div class="co-step-sub" id="cs-4-sub">Waiting...</div>
+        </div>
+        <div class="co-step-tick">✓</div>
+      </div>
+      <div class="co-step" id="cs-5">
+        <div class="co-step-icon">📋</div>
+        <div class="co-step-right">
+          <div class="co-step-label">Report Generated</div>
+          <div class="co-step-sub" id="cs-5-sub">Waiting...</div>
+        </div>
+        <div class="co-step-tick">✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: live stream + counter + result -->
+  <div class="co-right">
+    <div class="co-right-title">Live Packet Stream</div>
+
+    <div class="co-pkt-counter">
+      <div class="co-pkt-num" id="co-pkt-num">0</div>
+      <div class="co-pkt-label">packets captured</div>
+    </div>
+
+    <div class="co-pkt-stream" id="co-pkt-stream"></div>
+
+    <div class="co-result" id="co-result">
+      <div class="co-result-head">Triage Result</div>
+      <div class="co-result-grid" id="co-result-grid"></div>
+    </div>
+
+    <button class="co-back-btn" id="co-back-btn" onclick="closeOverlay()">
+      ← View Full Dashboard
+    </button>
+  </div>
+</div>
+
+</body>
+</html>
