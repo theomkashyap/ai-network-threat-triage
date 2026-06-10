@@ -207,7 +207,7 @@ The dashboard is a single-page application served by Flask. It polls the backend
 
 **Alert Feed** — every detected attack appears as a triage card showing severity badge, source IP, classification, risk score, and timestamp. Clicking a row expands the full triage report inline.
 
-**Live Capture Pipeline** — when a capture is running, a full-screen overlay shows each pipeline stage animating in real time with a live packet counter ticking up on the right side. (images/attacks/icmp-pipeline-done.png)
+**Live Capture Pipeline** — when a capture is running, a full-screen overlay shows each pipeline stage animating in real time with a live packet counter ticking up on the right side.
 
 **Statistics Tab** — bar charts showing alerts by attack type, alerts by risk level, and a daily alert timeline.
 
